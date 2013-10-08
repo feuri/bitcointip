@@ -3,8 +3,8 @@
 import sys
 sys.path.insert(0, "$HOME/bitcointip")
 
-from wsgiref.handlers import CGIHandler
+from flup.server.fcgi import WSGIServer
 from bitcointip import app
 
 if __name__ == '__main__':
-    CGIHandler().run(app)
+    WSGIServer(app).run()
