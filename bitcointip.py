@@ -125,7 +125,6 @@ def chart_day():
     header = {'Content-type': 'image/png'}
     data = cache.get('day_chart')
     if data is None:
-        print('new data (day)')
         data = download_data_day()
         cache.set('day_chart', data, 15*60)
     return(data, 200, header)
@@ -136,7 +135,6 @@ def chart_week():
     header = {'Content-type': 'image/png'}
     data = cache.get('week_chart')
     if data is None:
-        print('new data (week)')
         data = download_data_week()
         cache.set('week_chart', data, 60*60)
     return(data, 200, header)
