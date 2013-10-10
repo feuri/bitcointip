@@ -65,7 +65,7 @@ def download_data(url):
     req = Request(url)
     data = urlopen(req).read()
     with open('cache.html', 'w') as f:
-        f.write(data.decode())
+        f.write(data.decode(errors='ignore'))
     html = lxml.html.parse('cache.html').getroot()
     raw_tips = html.xpath('//div[@id="content"]/table//tr')
     if raw_tips == []:
@@ -115,6 +115,27 @@ def download_data_week():
     return(data)
 
 
+def download_data_month():
+    url = Template('http://bitcointip.net/tipped.php?subreddit=all&type=all&by=tipped&time=month&sort=last&page=${site}')
+    tips = {}
+    n_range = 5
+    for i in range(n_range):
+        tips[i] = []
+    i = 1
+    while True:
+        raw_tips = download_data(url.substitute(site=i))
+        if raw_tips is None:
+            break
+
+        tips = extract_tips(raw_tips, tips, 'week')
+        i += 1
+
+    data = plot_chart(tips, n_range,
+                      xlabel='Time ago (in weeks)',
+                      title='Tips during the last 4 weeks')
+    return(data)
+
+
 @app.route('/')
 def index():
     return(render_template('base.html'))
@@ -137,6 +158,16 @@ def chart_week():
     if data is None:
         data = download_data_week()
         cache.set('week_chart', data, 60*60)
+    return(data, 200, header)
+
+
+@app.route('/charts/month.png')
+def chart_month():
+    header = {'Content-type': 'image/png'}
+    data = cache.get('month_chart')
+    if data is None:
+        data = download_data_month()
+        cache.set('month_chart', data, 24*60*60)
     return(data, 200, header)
 
 
