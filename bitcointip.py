@@ -64,9 +64,10 @@ def plot_chart(tips, n_range,
 def download_data(url):
     req = Request(url)
     data = urlopen(req).read()
-    with open('cache.html', 'w') as f:
-        f.write(data.decode(errors='ignore'))
-    html = lxml.html.parse('cache.html').getroot()
+    buf = io.StringIO()
+    buf.write(data.decode(errors='ignore'))
+    buf.seek(0)
+    html = lxml.html.parse(buf).getroot()
     raw_tips = html.xpath('//div[@id="content"]/table//tr')
     if raw_tips == []:
         return(None)
