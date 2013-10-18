@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 
-
 import io
 from string import Template
 import sys
@@ -61,6 +60,44 @@ def plot_chart(tips, n_range,
     return(data)
 
 
+def plot_chart_tipped(tips,
+                      xlabel='Times tipped',
+                      ylabel='Amount tipped (in USD)',
+                      title='Tips so far'):
+    tip_values = []
+    for x in tips.values():
+        tip_values += x
+    bar_width = 0.5
+    index = np.arange(8)
+    separators = [500, 100, 25, 10, 5, 2.5, 1, 0]
+    for i in index:
+        amount = 0
+        for tip in tip_values:
+            if tip >= separators[i]:
+                amount += 1
+                tip_values.remove(tip)
+        plt.bar(i, amount, bar_width, alpha=0.4)
+
+    plt.xticks(index + bar_width/2, index)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+    ax = plt.subplot(111)
+    ax.set_xticklabels(['>'+str(x) for x in separators])
+    ax.yaxis.grid(color='gray', linestyle=':')
+    ax.annotate('Updated: {}'.format(time.strftime('%Y-%m-%d %H:%M %z')),
+                fontsize=9, color='gray',
+                xy=(1, 0), xycoords='axes fraction',
+                xytext=(0, -25), textcoords='offset points',
+                ha='right', va='top')
+    f = io.BytesIO()
+    plt.savefig(f, format='png')
+    f.seek(0)
+    data = f.read()
+    plt.cla()
+    return(data)
+
+
 def download_data(url):
     req = Request(url)
     data = urlopen(req).read()
@@ -89,10 +126,7 @@ def download_data_day():
         tips = extract_tips(raw_tips, tips, 'hour')
         i += 1
 
-    data = plot_chart(tips, n_range,
-                      xlabel='Time ago (in hours)',
-                      title='Tips during the last 24 hours')
-    return(data)
+    return(tips)
 
 
 def download_data_week():
@@ -110,10 +144,7 @@ def download_data_week():
         tips = extract_tips(raw_tips, tips, 'day')
         i += 1
 
-    data = plot_chart(tips, n_range,
-                      xlabel='Time ago (in days)',
-                      title='Tips during the last 7 days')
-    return(data)
+    return(tips)
 
 
 def download_data_month():
@@ -131,10 +162,7 @@ def download_data_month():
         tips = extract_tips(raw_tips, tips, 'week')
         i += 1
 
-    data = plot_chart(tips, n_range,
-                      xlabel='Time ago (in weeks)',
-                      title='Tips during the last 4 weeks')
-    return(data)
+    return(tips)
 
 
 @app.route('/')
@@ -146,9 +174,26 @@ def index():
 def chart_day():
     header = {'Content-type': 'image/png'}
     data = cache.get('day_chart')
+    data = None
     if data is None:
-        data = download_data_day()
+        tips = download_data_day()
+        data = plot_chart(tips, 25,
+                          xlabel='Time ago (in hours)',
+                          title='Tips during the last 24 hours')
         cache.set('day_chart', data, 15*60)
+    return(data, 200, header)
+
+
+@app.route('/charts/day_tipped.png')
+def chart_day_tipped():
+    header = {'Content-type': 'image/png'}
+    data = cache.get('day_chart_tipped')
+    if data is None:
+        tips = download_data_day()
+        data = plot_chart_tipped(tips,
+                                 xlabel='Time ago (in hours)',
+                                 title='Tips during the last 24 hours')
+        cache.set('day_chart_tipped', data, 15*60)
     return(data, 200, header)
 
 
@@ -157,8 +202,24 @@ def chart_week():
     header = {'Content-type': 'image/png'}
     data = cache.get('week_chart')
     if data is None:
-        data = download_data_week()
+        tips = download_data_week()
+        data = plot_chart(tips, 8,
+                          xlabel='Time ago (in days)',
+                          title='Tips during the last 7 days')
         cache.set('week_chart', data, 60*60)
+    return(data, 200, header)
+
+
+@app.route('/charts/week_tipped.png')
+def chart_week_tipped():
+    header = {'Content-type': 'image/png'}
+    data = cache.get('week_chart_tipped')
+    if data is None:
+        tips = download_data_week()
+        data = plot_chart_tipped(tips,
+                                 xlabel='Time ago (in days)',
+                                 title='Tips during the last 7 days')
+        cache.set('week_chart_tipped', data, 60*60)
     return(data, 200, header)
 
 
@@ -167,8 +228,24 @@ def chart_month():
     header = {'Content-type': 'image/png'}
     data = cache.get('month_chart')
     if data is None:
-        data = download_data_month()
+        tips = download_data_month()
+        data = plot_chart(tips, 5,
+                          xlabel='Time ago (in weeks)',
+                          title='Tips during the last 4 weeks')
         cache.set('month_chart', data, 24*60*60)
+    return(data, 200, header)
+
+
+@app.route('/charts/month_tipped.png')
+def chart_month_tipped():
+    header = {'Content-type': 'image/png'}
+    data = cache.get('month_chart_tipped')
+    if data is None:
+        tips = download_data_month()
+        data = plot_chart_tipped(tips,
+                                 xlabel='Time ago (in weeks)',
+                                 title='Tips during the last 4 weeks')
+        cache.set('month_chart_tipped', data, 24*60*60)
     return(data, 200, header)
 
 
