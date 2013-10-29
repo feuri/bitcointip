@@ -180,9 +180,11 @@ def index():
 def chart_day():
     header = {'Content-type': 'image/png'}
     data = cache.get('day_chart')
-    data = None
     if data is None:
-        tips = download_data_day()
+        tips = cache.get('day_tips')
+        if tips = None:
+            tips = download_data_day()
+            cache.set('day_tips', tips, 15*60)
         data = plot_chart(tips, 25,
                           xlabel='Time ago (in hours)',
                           title='Tips during the last 24 hours')
@@ -195,7 +197,10 @@ def chart_day_tipped():
     header = {'Content-type': 'image/png'}
     data = cache.get('day_chart_tipped')
     if data is None:
-        tips = download_data_day()
+        tips = cache.get('day_tips')
+        if tips = None:
+            tips = download_data_day()
+            cache.set('day_tips', tips, 15*60)
         data = plot_chart_tipped(tips,
                                  xlabel='Time ago (in hours)',
                                  title='Tips during the last 24 hours')
@@ -208,7 +213,10 @@ def chart_week():
     header = {'Content-type': 'image/png'}
     data = cache.get('week_chart')
     if data is None:
-        tips = download_data_week()
+        tips = cache.get('week_tips')
+        if tips = None:
+            tips = download_data_week()
+            cache.set('week_tips', tips, 60*60)
         data = plot_chart(tips, 8,
                           xlabel='Time ago (in days)',
                           title='Tips during the last 7 days')
@@ -221,7 +229,10 @@ def chart_week_tipped():
     header = {'Content-type': 'image/png'}
     data = cache.get('week_chart_tipped')
     if data is None:
-        tips = download_data_week()
+        tips = cache.get('week_tips')
+        if tips = None:
+            tips = download_data_week()
+            cache.set('week_tips', tips, 60*60)
         data = plot_chart_tipped(tips,
                                  xlabel='Time ago (in days)',
                                  title='Tips during the last 7 days')
@@ -234,7 +245,10 @@ def chart_month():
     header = {'Content-type': 'image/png'}
     data = cache.get('month_chart')
     if data is None:
-        tips = download_data_month()
+        tips = cache.get('month_tips')
+        if tips = None:
+            tips = download_data_month()
+            cache.set('month_tips', tips, 24*60*60)
         data = plot_chart(tips, 5,
                           xlabel='Time ago (in weeks)',
                           title='Tips during the last 4 weeks')
@@ -247,7 +261,10 @@ def chart_month_tipped():
     header = {'Content-type': 'image/png'}
     data = cache.get('month_chart_tipped')
     if data is None:
-        tips = download_data_month()
+        tips = cache.get('month_tips')
+        if tips = None:
+            tips = download_data_month()
+            cache.set('month_tips', tips, 24*60*60)
         data = plot_chart_tipped(tips,
                                  xlabel='Time ago (in weeks)',
                                  title='Tips during the last 4 weeks')
