@@ -182,7 +182,7 @@ def chart_day():
     data = cache.get('day_chart')
     if data is None:
         tips = cache.get('day_tips')
-        if tips = None:
+        if tips is None:
             tips = download_data_day()
             cache.set('day_tips', tips, 15*60)
         data = plot_chart(tips, 25,
@@ -198,7 +198,7 @@ def chart_day_tipped():
     data = cache.get('day_chart_tipped')
     if data is None:
         tips = cache.get('day_tips')
-        if tips = None:
+        if tips is None:
             tips = download_data_day()
             cache.set('day_tips', tips, 15*60)
         data = plot_chart_tipped(tips,
@@ -214,7 +214,7 @@ def chart_week():
     data = cache.get('week_chart')
     if data is None:
         tips = cache.get('week_tips')
-        if tips = None:
+        if tips is None:
             tips = download_data_week()
             cache.set('week_tips', tips, 60*60)
         data = plot_chart(tips, 8,
@@ -230,7 +230,7 @@ def chart_week_tipped():
     data = cache.get('week_chart_tipped')
     if data is None:
         tips = cache.get('week_tips')
-        if tips = None:
+        if tips is None:
             tips = download_data_week()
             cache.set('week_tips', tips, 60*60)
         data = plot_chart_tipped(tips,
@@ -246,7 +246,7 @@ def chart_month():
     data = cache.get('month_chart')
     if data is None:
         tips = cache.get('month_tips')
-        if tips = None:
+        if tips is None:
             tips = download_data_month()
             cache.set('month_tips', tips, 24*60*60)
         data = plot_chart(tips, 5,
@@ -262,7 +262,7 @@ def chart_month_tipped():
     data = cache.get('month_chart_tipped')
     if data is None:
         tips = cache.get('month_tips')
-        if tips = None:
+        if tips is None:
             tips = download_data_month()
             cache.set('month_tips', tips, 24*60*60)
         data = plot_chart_tipped(tips,
