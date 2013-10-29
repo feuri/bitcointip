@@ -66,8 +66,8 @@ def plot_chart(tips, n_range,
 
 
 def plot_chart_tipped(tips,
-                      xlabel='Times tipped',
-                      ylabel='Amount tipped (in USD)',
+                      xlabel='Amount tipped (in USD)',
+                      ylabel='Times tipped',
                       title='Tips so far'):
     tip_values = []
     for x in tips.values():
@@ -202,7 +202,6 @@ def chart_day_tipped():
             tips = download_data_day()
             cache.set('day_tips', tips, 15*60)
         data = plot_chart_tipped(tips,
-                                 xlabel='Time ago (in hours)',
                                  title='Tips during the last 24 hours')
         cache.set('day_chart_tipped', data, 15*60)
     return(data, 200, header)
@@ -234,7 +233,6 @@ def chart_week_tipped():
             tips = download_data_week()
             cache.set('week_tips', tips, 60*60)
         data = plot_chart_tipped(tips,
-                                 xlabel='Time ago (in days)',
                                  title='Tips during the last 7 days')
         cache.set('week_chart_tipped', data, 60*60)
     return(data, 200, header)
@@ -266,7 +264,6 @@ def chart_month_tipped():
             tips = download_data_month()
             cache.set('month_tips', tips, 24*60*60)
         data = plot_chart_tipped(tips,
-                                 xlabel='Time ago (in weeks)',
                                  title='Tips during the last 4 weeks')
         cache.set('month_chart_tipped', data, 24*60*60)
     return(data, 200, header)
