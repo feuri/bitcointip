@@ -20,12 +20,17 @@ cache = FileSystemCache('cache/')
 
 def extract_tips(raw_tips, tips, timespan):
     for tip in raw_tips:
+        data = {'amount': 0.00,
+                'subreddit': '',
+                'user': ''}
         time_ago = tip.xpath('td[@class="right"]/span')[0].text_content()
         time_ago = time_ago.split('\n')[1]
         time_ago = time_ago.split(' ')
         time_ago = 0 if not timespan in time_ago[3] else int(time_ago[2])
-        amount = float(tip.xpath('td[@class="left"]/a')[0].text_content()[1:])
-        tips[time_ago].append(amount)
+        data['amount'] = float(tip.xpath('td[@class="left"]/a')[0].text_content()[1:])
+        data['subreddit'] = tip.xpath('td[@class="right"]/span/a')[1].text
+        data['user'] = tip.xpath('td[@class="right"]/span/a')[0].text
+        tips[time_ago].append(data)
     return(tips)
 
 
@@ -38,7 +43,7 @@ def plot_chart(tips, n_range,
     for i in index:
         amount = 0
         for tip in tips[i]:
-            amount += tip
+            amount += tip['amount']
         plt.bar(i, amount, bar_width, alpha=0.4)
 
     plt.xticks(index + bar_width/2, index)
@@ -66,7 +71,8 @@ def plot_chart_tipped(tips,
                       title='Tips so far'):
     tip_values = []
     for x in tips.values():
-        tip_values += x
+        for y in x:
+            tip_values.append(y['amount'])
     bar_width = 0.5
     index = np.arange(8)
     separators = [500, 100, 25, 10, 5, 2.5, 1, 0]
