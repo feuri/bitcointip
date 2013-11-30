@@ -1,12 +1,15 @@
 #!/usr/bin/python3
 
+from contextlib import closing
 import io
+import json
 from string import Template
+import sqlite3
 import sys
 import time
 from urllib.request import urlopen, Request
 
-from flask import Flask, render_template
+from flask import Flask, g, render_template
 import lxml.html
 import matplotlib
 matplotlib.use('Agg')
@@ -16,22 +19,141 @@ from werkzeug.contrib.cache import FileSystemCache
 
 app = Flask(__name__)
 cache = FileSystemCache('cache/')
+header_img = {'Content-type': 'image/png'}
+header_ua = {'User-Agent': 'bitcointip.feuri.de/0.0.1'}
 
 
-def extract_tips(raw_tips, tips, timespan):
+def extract_tips(raw_tips):
+    # 1) get tipped comment
+    #    http://bitcointip.net/tipped.php?subreddit=all&type=all&by=tipped&time=day&sort=last
+    # 2) use link provided to find tipping comment :/
+    # 3) get tip data
+    #    http://bitcointip.net/api/gettips.php?tips=c7h194m,cd811o0
+    # 4) get comment data
+    #    http://www.reddit.com/api/info.json?id=t1_c7h194m
+    tips = []
     for tip in raw_tips:
-        data = {'amount': 0.00,
-                'subreddit': '',
-                'user': ''}
-        time_ago = tip.xpath('td[@class="right"]/span')[0].text_content()
-        time_ago = time_ago.split('\n')[1]
-        time_ago = time_ago.split(' ')
-        time_ago = 0 if not timespan in time_ago[3] else int(time_ago[2])
-        data['amount'] = float(tip.xpath('td[@class="left"]/a')[0].text_content()[1:])
-        data['subreddit'] = tip.xpath('td[@class="right"]/span/a')[1].text
-        data['user'] = tip.xpath('td[@class="right"]/span/a')[0].text
-        tips[time_ago].append(data)
+        data_tip = {}
+        url_tipped = tip.xpath('td[@class="right"]/a')[0].get('href')
+        data_tip['subreddit'] = tip.xpath('td[@class="right"]/span/a')[1].text
+        data_tip['fullname'] = get_tipping_comment(url_tipped)
+        if data_tip['fullname'] is None:
+            continue
+        c_data = get_comment_data(data_tip['fullname'].split('_')[1])
+        if c_data is None:
+            continue
+        data_tip['amountBTC'] = c_data['amountBTC']
+        data_tip['amountUSD'] = c_data['amountUSD']
+        data_tip['sender'] = c_data['sender']
+        data_tip['receiver'] = c_data['receiver']
+        data_tip['time'] = get_comment_time(data_tip['fullname'])
+        tips.append(data_tip)
     return(tips)
+
+
+def get_tipping_comment(url):
+    print(url)
+    toplevel = False
+    url_split = url.split('/')
+    if url_split[6] == url_split[8]:
+        toplevel = True
+    req = Request(url, headers=header_ua)
+    data = urlopen(req).read()
+    buf = io.StringIO()
+    buf.write(data.decode(errors='ignore'))
+    buf.seek(0)
+    html = lxml.html.parse(buf).getroot()
+    # bitcointip_keywords = ('+/u/bitcointip')
+    comment_id = None
+    if toplevel:
+        comment_list = html.xpath('//div[@class="commentarea"]/div[@class="sitetable nestedlisting"]/div[@data-fullname]')
+        if len(comment_list) == 0:
+            comment_id = comment_list[0].get('data-fullname')
+        else:
+            for c in comment_list:
+                if '+/u/bitcointip' in c.xpath('div[contains(@class, "entry")]/div[@class="noncollapsed"]/form[@class="usertext"]/div[@class="usertext-body"]/div[@class="md"]')[0].text_content():
+                    comment_id = c.get('data-fullname')
+                    break
+    else:
+        comment_list = html.xpath('//div[@class="commentarea"]/div[@class="sitetable nestedlisting"]/div/div[@class="child"]/div/div[@data-fullname]')
+        if len(comment_list) == 1:
+            comment_id = comment_list[0].get('data-fullname')
+        else:
+            for c in comment_list:
+                if '+/u/bitcointip' in c.xpath('div[contains(@class, "entry")]/div[@class="noncollapsed"]/form[@class="usertext"]/div[@class="usertext-body"]/div[@class="md"]')[0].text_content():
+                    comment_id = c.get('data-fullname')
+                    break
+    return(comment_id)
+
+
+def get_comment_data(comment_id):
+    api_gettips = Template('http://bitcointip.net/api/gettips.php?tips=${cid}')
+    req = Request(api_gettips.substitute(cid=comment_id), headers=header_ua)
+    data = urlopen(req).read()
+    buf = io.StringIO()
+    buf.write(data.decode())
+    buf.seek(0)
+    data = json.load(buf)
+    if data['tips'] == []:
+        return(None)
+    c_data = {}
+    c_data['amountBTC'] = data['tips'][0]['amountBTC']
+    c_data['amountUSD'] = data['tips'][0]['amountUSD']
+    c_data['sender'] = data['tips'][0]['sender']
+    c_data['receiver'] = data['tips'][0]['receiver']
+    return(c_data)
+
+
+def get_comment_time(fullname):
+    api_time = Template('http://www.reddit.com/api/info.json?id=${id}')
+    req = Request(api_time.substitute(id=fullname), headers=header_ua)
+    data = urlopen(req).read()
+    buf = io.StringIO()
+    buf.write(data.decode())
+    buf.seek(0)
+    data = json.load(buf)
+    c_time = int(data['data']['children'][0]['data']['created_utc'])
+    return(c_time)
+
+
+def connect_db():
+    return(sqlite3.connect('bitcointip.db'))
+
+
+def update_db(tips):
+    with closing(connect_db()) as db:
+        c = db.cursor()
+        # TODO to init method
+        c.execute('CREATE TABLE IF NOT EXISTS tips (id TEXT UNIQUE, amountBTC REAL, amountUSD REAL, time INTEGER, sender TEXT, receiver TEXT, subreddit TEXT)')
+        with db:
+            c = db.cursor()
+            for tip in tips:
+                try:
+                    c.execute('INSERT INTO tips VALUES (?, ?, ?, ?, ?, ?)', (tip['fullname'],
+                                                                             tip['amountBTC'],
+                                                                             tip['amountUSD'],
+                                                                             tip['time'],
+                                                                             tip['sender'],
+                                                                             tip['receiver'],
+                                                                             tip['subreddit']))
+                except sqlite3.IntegrityError as e:
+                    # c.execute() yields a 'sqlite3.IntegrityError' if id (type: TEXT UNIQUE) is not unique
+                    print('tip {} already in db, skipping (SQL: {})'.format(tip['fullname'], e))
+
+
+def sync(time='hour'):
+    url = Template('http://bitcointip.net/tipped.php?subreddit=all&type=all&by=tipped&time=${time}&sort=last&page=${site}')
+    tips = {}
+    i = 1
+    while True:
+        print('Page: {}'.format(i))
+        raw_tips = download_data(url.substitute(time=time, site=i))
+        if raw_tips is None:
+            break
+
+        tips = extract_tips(raw_tips)
+        update_db(tips)
+        i += 1
 
 
 def plot_chart(tips, n_range,
@@ -105,7 +227,7 @@ def plot_chart_tipped(tips,
 
 
 def download_data(url):
-    req = Request(url)
+    req = Request(url, headers=header_ua)
     data = urlopen(req).read()
     buf = io.StringIO()
     buf.write(data.decode(errors='ignore'))
@@ -171,6 +293,18 @@ def download_data_month():
     return(tips)
 
 
+@app.before_request
+def before_request():
+    g.db = connect_db()
+
+
+@app.teardown_request
+def teardown_request(exception):
+    db = getattr(g, 'db', None)
+    if db is not None:
+        db.close()
+
+
 @app.route('/')
 def index():
     return(render_template('base.html'))
@@ -178,7 +312,6 @@ def index():
 
 @app.route('/charts/day.png')
 def chart_day():
-    header = {'Content-type': 'image/png'}
     data = cache.get('day_chart')
     if data is None:
         tips = cache.get('day_tips')
@@ -189,12 +322,11 @@ def chart_day():
                           xlabel='Time ago (in hours)',
                           title='Tips during the last 24 hours')
         cache.set('day_chart', data, 15*60)
-    return(data, 200, header)
+    return(data, 200, header_img)
 
 
 @app.route('/charts/day_tipped.png')
 def chart_day_tipped():
-    header = {'Content-type': 'image/png'}
     data = cache.get('day_chart_tipped')
     if data is None:
         tips = cache.get('day_tips')
@@ -204,12 +336,11 @@ def chart_day_tipped():
         data = plot_chart_tipped(tips,
                                  title='Tips during the last 24 hours')
         cache.set('day_chart_tipped', data, 15*60)
-    return(data, 200, header)
+    return(data, 200, header_img)
 
 
 @app.route('/charts/week.png')
 def chart_week():
-    header = {'Content-type': 'image/png'}
     data = cache.get('week_chart')
     if data is None:
         tips = cache.get('week_tips')
@@ -220,12 +351,11 @@ def chart_week():
                           xlabel='Time ago (in days)',
                           title='Tips during the last 7 days')
         cache.set('week_chart', data, 60*60)
-    return(data, 200, header)
+    return(data, 200, header_img)
 
 
 @app.route('/charts/week_tipped.png')
 def chart_week_tipped():
-    header = {'Content-type': 'image/png'}
     data = cache.get('week_chart_tipped')
     if data is None:
         tips = cache.get('week_tips')
@@ -235,12 +365,11 @@ def chart_week_tipped():
         data = plot_chart_tipped(tips,
                                  title='Tips during the last 7 days')
         cache.set('week_chart_tipped', data, 60*60)
-    return(data, 200, header)
+    return(data, 200, header_img)
 
 
 @app.route('/charts/month.png')
 def chart_month():
-    header = {'Content-type': 'image/png'}
     data = cache.get('month_chart')
     if data is None:
         tips = cache.get('month_tips')
@@ -251,12 +380,11 @@ def chart_month():
                           xlabel='Time ago (in weeks)',
                           title='Tips during the last 4 weeks')
         cache.set('month_chart', data, 24*60*60)
-    return(data, 200, header)
+    return(data, 200, header_img)
 
 
 @app.route('/charts/month_tipped.png')
 def chart_month_tipped():
-    header = {'Content-type': 'image/png'}
     data = cache.get('month_chart_tipped')
     if data is None:
         tips = cache.get('month_tips')
@@ -266,7 +394,7 @@ def chart_month_tipped():
         data = plot_chart_tipped(tips,
                                  title='Tips during the last 4 weeks')
         cache.set('month_chart_tipped', data, 24*60*60)
-    return(data, 200, header)
+    return(data, 200, header_img)
 
 
 @app.route('/imprint')
@@ -274,4 +402,16 @@ def imprint():
     return(render_template('imprint.html'))
 
 if __name__ == '__main__':
-    sys.exit(app.run(debug=True))
+    if len(sys.argv) == 1:
+        # serve
+        sys.exit(app.run(debug=True))
+    elif len(sys.argv) == 2:
+        if sys.argv[1] == 'help':
+            pass
+        elif sys.argv[1] == 'sync':
+            sync()
+    elif len(sys.argv) == 3:
+        sync(sys.argv[2])
+    else:
+        # serve, wrong amount of parameters
+        sys.exit(app.run(debug=True))
