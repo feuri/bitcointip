@@ -129,13 +129,13 @@ def update_db(tips):
             c = db.cursor()
             for tip in tips:
                 try:
-                    c.execute('INSERT INTO tips VALUES (?, ?, ?, ?, ?, ?)', (tip['fullname'],
-                                                                             tip['amountBTC'],
-                                                                             tip['amountUSD'],
-                                                                             tip['time'],
-                                                                             tip['sender'],
-                                                                             tip['receiver'],
-                                                                             tip['subreddit']))
+                    c.execute('INSERT INTO tips VALUES (?, ?, ?, ?, ?, ?, ?)', (tip['fullname'],
+                                                                                tip['amountBTC'],
+                                                                                tip['amountUSD'],
+                                                                                tip['time'],
+                                                                                tip['sender'],
+                                                                                tip['receiver'],
+                                                                                tip['subreddit']))
                 except sqlite3.IntegrityError as e:
                     # c.execute() yields a 'sqlite3.IntegrityError' if id (type: TEXT UNIQUE) is not unique
                     print('tip {} already in db, skipping (SQL: {})'.format(tip['fullname'], e))
