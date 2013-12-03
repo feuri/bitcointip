@@ -23,6 +23,16 @@ header_img = {'Content-type': 'image/png'}
 header_ua = {'User-Agent': 'bitcointip.feuri.de/0.0.1'}
 
 
+def load_url(url):
+    # TODO handle HTTPError 504 (Gateway Time-Out, just retry)
+    req = Request(url, headers=header_ua)
+    data = urlopen(req).read()
+    buf = io.StringIO()
+    buf.write(data.decode(errors='ignore'))
+    buf.seek(0)
+    return(buf)
+
+
 def extract_tips(raw_tips):
     # 1) get tipped comment
     #    http://bitcointip.net/tipped.php?subreddit=all&type=all&by=tipped&time=day&sort=last
@@ -60,14 +70,7 @@ def get_tipping_comment(url):
     url_split = url.split('/')
     if url_split[6] == url_split[8]:
         toplevel = True
-    # TODO
-    # - put next 5 lines into common function
-    # - handle HTTPError 504 (Gateway Time-Out, just retry)
-    req = Request(url, headers=header_ua)
-    data = urlopen(req).read()
-    buf = io.StringIO()
-    buf.write(data.decode(errors='ignore'))
-    buf.seek(0)
+    buf = load_url(url)
     html = lxml.html.parse(buf).getroot()
     # bitcointip_keywords = ('+/u/bitcointip')
     comment_id = None
@@ -112,11 +115,7 @@ def get_comment_data(comment_id):
 
 def get_comment_time(fullname):
     api_time = Template('http://www.reddit.com/api/info.json?id=${id}')
-    req = Request(api_time.substitute(id=fullname), headers=header_ua)
-    data = urlopen(req).read()
-    buf = io.StringIO()
-    buf.write(data.decode())
-    buf.seek(0)
+    buf = load_url(api_time.substitute(id=fullname))
     data = json.load(buf)
     c_time = int(data['data']['children'][0]['data']['created_utc'])
     return(c_time)
@@ -233,11 +232,7 @@ def plot_chart_tipped(tips,
 
 
 def download_data(url):
-    req = Request(url, headers=header_ua)
-    data = urlopen(req).read()
-    buf = io.StringIO()
-    buf.write(data.decode(errors='ignore'))
-    buf.seek(0)
+    buf = load_url(url)
     html = lxml.html.parse(buf).getroot()
     raw_tips = html.xpath('//div[@id="content"]/table//tr')
     if raw_tips == []:
