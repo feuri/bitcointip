@@ -53,10 +53,16 @@ def extract_tips(raw_tips):
 
 def get_tipping_comment(url):
     print(url)
+    # dont know haw to view NSFW subreddit content yet, skip them for now
+    if ('GirlsGoneBitcoin') in url:
+        break
     toplevel = False
     url_split = url.split('/')
     if url_split[6] == url_split[8]:
         toplevel = True
+    # TODO
+    # - put next 5 lines into common function
+    # - handle HTTPError 504 (Gateway Time-Out, just retry)
     req = Request(url, headers=header_ua)
     data = urlopen(req).read()
     buf = io.StringIO()
@@ -141,10 +147,10 @@ def update_db(tips):
                     print('tip {} already in db, skipping (SQL: {})'.format(tip['fullname'], e))
 
 
-def sync(time='hour'):
+def sync(time='hour', page=1):
     url = Template('http://bitcointip.net/tipped.php?subreddit=all&type=all&by=tipped&time=${time}&sort=last&page=${site}')
     tips = {}
-    i = 1
+    i = page
     while True:
         print('Page: {}'.format(i))
         raw_tips = download_data(url.substitute(time=time, site=i))
@@ -165,7 +171,7 @@ def plot_chart(tips, n_range,
     for i in index:
         amount = 0
         for tip in tips[i]:
-            amount += tip['amount']
+            amount += tip
         plt.bar(i, amount, bar_width, alpha=0.4)
 
     plt.xticks(index + bar_width/2, index)
@@ -314,10 +320,18 @@ def index():
 def chart_day():
     data = cache.get('day_chart')
     if data is None:
-        tips = cache.get('day_tips')
-        if tips is None:
-            tips = download_data_day()
-            cache.set('day_tips', tips, 15*60)
+        tips = {}
+        n_range = 25
+        db = getattr(g, 'db', None)
+        with db:
+            for i in range(n_range):
+                tips[i] = []
+                c = db.cursor()
+                now = time.time()
+                c.execute('SELECT amountBTC FROM tips WHERE time BETWEEN ? AND ?', (now - (i+1)*60*60,
+                                                                                    now - i*60*60))
+                for x in c:
+                    tips[i].append(x[0])
         data = plot_chart(tips, 25,
                           xlabel='Time ago (in hours)',
                           title='Tips during the last 24 hours')
@@ -343,10 +357,18 @@ def chart_day_tipped():
 def chart_week():
     data = cache.get('week_chart')
     if data is None:
-        tips = cache.get('week_tips')
-        if tips is None:
-            tips = download_data_week()
-            cache.set('week_tips', tips, 60*60)
+        tips = {}
+        n_range = 8
+        db = getattr(g, 'db', None)
+        with db:
+            for i in range(n_range):
+                tips[i] = []
+                c = db.cursor()
+                now = time.time()
+                c.execute('SELECT amountBTC FROM tips WHERE time BETWEEN ? AND ?', (now - (i+1)*24*60*60,
+                                                                                    now - i*24*60*60))
+                for x in c:
+                    tips[i].append(x[0])
         data = plot_chart(tips, 8,
                           xlabel='Time ago (in days)',
                           title='Tips during the last 7 days')
@@ -372,10 +394,18 @@ def chart_week_tipped():
 def chart_month():
     data = cache.get('month_chart')
     if data is None:
-        tips = cache.get('month_tips')
-        if tips is None:
-            tips = download_data_month()
-            cache.set('month_tips', tips, 24*60*60)
+        tips = {}
+        n_range = 5
+        db = getattr(g, 'db', None)
+        with db:
+            for i in range(n_range):
+                tips[i] = []
+                c = db.cursor()
+                now = time.time()
+                c.execute('SELECT amountBTC FROM tips WHERE time BETWEEN ? AND ?', (now - (i+1)*7*24*60*60,
+                                                                                    now - i*7*24*60*60))
+                for x in c:
+                    tips[i].append(x[0])
         data = plot_chart(tips, 5,
                           xlabel='Time ago (in weeks)',
                           title='Tips during the last 4 weeks')
@@ -412,6 +442,8 @@ if __name__ == '__main__':
             sync()
     elif len(sys.argv) == 3:
         sync(sys.argv[2])
+    elif len(sys.argv) == 4:
+        sync(sys.argv[2], sys.argv[3])
     else:
         # serve, wrong amount of parameters
         sys.exit(app.run(debug=True))
