@@ -97,11 +97,7 @@ def get_tipping_comment(url):
 
 def get_comment_data(comment_id):
     api_gettips = Template('http://bitcointip.net/api/gettips.php?tips=${cid}')
-    req = Request(api_gettips.substitute(cid=comment_id), headers=header_ua)
-    data = urlopen(req).read()
-    buf = io.StringIO()
-    buf.write(data.decode())
-    buf.seek(0)
+    buf = load_url(api_gettips.substitute(cid=comment_id))
     data = json.load(buf)
     if data['tips'] == []:
         return(None)
