@@ -55,7 +55,7 @@ def get_tipping_comment(url):
     print(url)
     # dont know haw to view NSFW subreddit content yet, skip them for now
     if ('GirlsGoneBitcoin') in url:
-        break
+        return(None)
     toplevel = False
     url_split = url.split('/')
     if url_split[6] == url_split[8]:
