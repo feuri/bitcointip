@@ -248,60 +248,6 @@ def download_data(url):
     return(raw_tips)
 
 
-def download_data_day():
-    url = Template('http://bitcointip.net/tipped.php?subreddit=all&type=all&by=tipped&time=day&sort=last&page=${site}')
-    tips = {}
-    n_range = 25
-    for i in range(n_range):
-        tips[i] = []
-    i = 1
-    while True:
-        raw_tips = download_data(url.substitute(site=i))
-        if raw_tips is None:
-            break
-
-        tips = extract_tips(raw_tips, tips, 'hour')
-        i += 1
-
-    return(tips)
-
-
-def download_data_week():
-    url = Template('http://bitcointip.net/tipped.php?subreddit=all&type=all&by=tipped&time=week&sort=last&page=${site}')
-    tips = {}
-    n_range = 8
-    for i in range(n_range):
-        tips[i] = []
-    i = 1
-    while True:
-        raw_tips = download_data(url.substitute(site=i))
-        if raw_tips is None:
-            break
-
-        tips = extract_tips(raw_tips, tips, 'day')
-        i += 1
-
-    return(tips)
-
-
-def download_data_month():
-    url = Template('http://bitcointip.net/tipped.php?subreddit=all&type=all&by=tipped&time=month&sort=last&page=${site}')
-    tips = {}
-    n_range = 5
-    for i in range(n_range):
-        tips[i] = []
-    i = 1
-    while True:
-        raw_tips = download_data(url.substitute(site=i))
-        if raw_tips is None:
-            break
-
-        tips = extract_tips(raw_tips, tips, 'week')
-        i += 1
-
-    return(tips)
-
-
 @app.before_request
 def before_request():
     g.db = connect_db()
