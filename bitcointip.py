@@ -7,6 +7,7 @@ from string import Template
 import sqlite3
 import sys
 import time
+from urllib.error import HTTPError
 from urllib.request import urlopen, Request
 
 from flask import Flask, g, render_template
@@ -26,7 +27,13 @@ header_ua = {'User-Agent': 'bitcointip.feuri.de/0.0.1'}
 def load_url(url):
     # TODO handle HTTPError 504 (Gateway Time-Out, just retry)
     req = Request(url, headers=header_ua)
-    data = urlopen(req).read()
+    try:
+        data = urlopen(req).read()
+    except HTTPError as e:
+        if e.code == 504:
+            return(e.code)
+        else:
+            return(None)
     buf = io.StringIO()
     buf.write(data.decode(errors='ignore'))
     buf.seek(0)
@@ -117,7 +124,13 @@ def get_comment_time(fullname):
     return(c_time)
 
 
-def connect_db():
+def connect_db(rw=False):
+    # ro is support in python 3.4+
+    # http://docs.python.org/3.4/library/sqlite3.html?highlight=sqlite3#sqlite3.connect
+    #if rw:
+    #    return(sqlite3.connect('bitcointip.db'))
+    #else:
+    #    return(sqlite3.connect('file:bitcointip.db?mode=ro', uri=True))
     return(sqlite3.connect('bitcointip.db'))
 
 
@@ -159,7 +172,7 @@ def sync(time='hour', page=1):
 
 def plot_chart(tips, n_range,
                xlabel='Time ago',
-               ylabel='Amount tipped (in USD)',
+               ylabel='Amount tipped (in BTC)',
                title='Tips so far'):
     bar_width = 0.5
     index = np.arange(n_range)
@@ -189,22 +202,21 @@ def plot_chart(tips, n_range,
 
 
 def plot_chart_tipped(tips,
-                      xlabel='Amount tipped (in USD)',
+                      xlabel='Amount tipped (in BTC)',
                       ylabel='Times tipped',
                       title='Tips so far'):
-    tip_values = []
-    for x in tips.values():
-        for y in x:
-            tip_values.append(y['amount'])
     bar_width = 0.5
-    index = np.arange(8)
-    separators = [500, 100, 25, 10, 5, 2.5, 1, 0]
+    # USD
+    #separators = [500, 100, 25, 10, 5, 2.5, 1, 0]
+    # BTC
+    separators = [1, 0.5, 0.01, 0.005, 0.001, 0]
+    index = np.arange(len(separators))
     for i in index:
         amount = 0
-        for tip in tip_values:
+        for tip in tips:
             if tip >= separators[i]:
                 amount += 1
-                tip_values.remove(tip)
+                tips.remove(tip)
         plt.bar(i, amount, bar_width, alpha=0.4)
 
     plt.xticks(index + bar_width/2, index)
@@ -334,10 +346,15 @@ def chart_day():
 def chart_day_tipped():
     data = cache.get('day_chart_tipped')
     if data is None:
-        tips = cache.get('day_tips')
-        if tips is None:
-            tips = download_data_day()
-            cache.set('day_tips', tips, 15*60)
+        tips = []
+        db = getattr(g, 'db', None)
+        with db:
+            c = db.cursor()
+            now = time.time()
+            c.execute('SELECT amountBTC FROM tips WHERE time BETWEEN ? AND ?', (now - 24*60*60,
+                                                                                now))
+            for x in c:
+                tips.append(x[0])
         data = plot_chart_tipped(tips,
                                  title='Tips during the last 24 hours')
         cache.set('day_chart_tipped', data, 15*60)
@@ -371,10 +388,15 @@ def chart_week():
 def chart_week_tipped():
     data = cache.get('week_chart_tipped')
     if data is None:
-        tips = cache.get('week_tips')
-        if tips is None:
-            tips = download_data_week()
-            cache.set('week_tips', tips, 60*60)
+        tips = []
+        db = getattr(g, 'db', None)
+        with db:
+            c = db.cursor()
+            now = time.time()
+            c.execute('SELECT amountBTC FROM tips WHERE time BETWEEN ? AND ?', (now - 7*24*60*60,
+                                                                                now))
+            for x in c:
+                tips.append(x[0])
         data = plot_chart_tipped(tips,
                                  title='Tips during the last 7 days')
         cache.set('week_chart_tipped', data, 60*60)
@@ -408,10 +430,15 @@ def chart_month():
 def chart_month_tipped():
     data = cache.get('month_chart_tipped')
     if data is None:
-        tips = cache.get('month_tips')
-        if tips is None:
-            tips = download_data_month()
-            cache.set('month_tips', tips, 24*60*60)
+        tips = []
+        db = getattr(g, 'db', None)
+        with db:
+            c = db.cursor()
+            now = time.time()
+            c.execute('SELECT amountBTC FROM tips WHERE time BETWEEN ? AND ?', (now - 4*24*60*60,
+                                                                                now))
+            for x in c:
+                tips.append(x[0])
         data = plot_chart_tipped(tips,
                                  title='Tips during the last 4 weeks')
         cache.set('month_chart_tipped', data, 24*60*60)
@@ -434,7 +461,7 @@ if __name__ == '__main__':
     elif len(sys.argv) == 3:
         sync(sys.argv[2])
     elif len(sys.argv) == 4:
-        sync(sys.argv[2], sys.argv[3])
+        sync(sys.argv[2], int(sys.argv[3]))
     else:
         # serve, wrong amount of parameters
         sys.exit(app.run(debug=True))
