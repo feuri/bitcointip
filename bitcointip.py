@@ -50,55 +50,66 @@ def extract_tips(raw_tips):
     #    http://www.reddit.com/api/info.json?id=t1_c7h194m
     tips = []
     for tip in raw_tips:
-        data_tip = {}
-        url_tipped = tip.xpath('td[@class="right"]/a')[0].get('href')
-        data_tip['subreddit'] = tip.xpath('td[@class="right"]/span/a')[1].text
-        data_tip['fullname'] = get_tipping_comment(url_tipped)
-        if data_tip['fullname'] is None:
-            continue
-        c_data = get_comment_data(data_tip['fullname'].split('_')[1])
-        if c_data is None:
-            continue
-        data_tip['amountBTC'] = c_data['amountBTC']
-        data_tip['amountUSD'] = c_data['amountUSD']
-        data_tip['sender'] = c_data['sender']
-        data_tip['receiver'] = c_data['receiver']
-        data_tip['time'] = get_comment_time(data_tip['fullname'])
-        tips.append(data_tip)
+        try:
+            data_tip = {}
+            url_tipped = tip.xpath('td[@class="right"]/a')[0].get('href')
+            data_tip['subreddit'] = tip.xpath('td[@class="right"]/span/a')[1].text
+            # skip comment for now, if no tip is found
+            # TODO: proper error handling
+            try:
+                data_tip['fullname'] = get_tipping_comment(url_tipped)
+            except IndexError:
+                continue
+            if data_tip['fullname'] is None:
+                continue
+            c_data = get_comment_data(data_tip['fullname'].split('_')[1])
+            if c_data is None:
+                continue
+            data_tip['amountBTC'] = c_data['amountBTC']
+            data_tip['amountUSD'] = c_data['amountUSD']
+            data_tip['sender'] = c_data['sender']
+            data_tip['receiver'] = c_data['receiver']
+            data_tip['time'] = get_comment_time(data_tip['fullname'])
+            tips.append(data_tip)
+        except KeyboardInterrupt:
+            raise
     return(tips)
 
 
 def get_tipping_comment(url):
-    print(url)
-    # dont know haw to view NSFW subreddit content yet, skip them for now
-    if ('GirlsGoneBitcoin') in url:
-        return(None)
-    toplevel = False
-    url_split = url.split('/')
-    if url_split[6] == url_split[8]:
-        toplevel = True
-    buf = load_url(url)
-    html = lxml.html.parse(buf).getroot()
-    # bitcointip_keywords = ('+/u/bitcointip')
-    comment_id = None
-    if toplevel:
-        comment_list = html.xpath('//div[@class="commentarea"]/div[@class="sitetable nestedlisting"]/div[@data-fullname]')
-        if len(comment_list) == 0:
-            comment_id = comment_list[0].get('data-fullname')
+    try:
+        print(url)
+        # dont know how to view NSFW subreddit content yet, skip them for now
+        if ('GirlsGoneBitcoin') in url:
+            return(None)
+        toplevel = False
+        url_split = url.split('/')
+        if url_split[6] == url_split[8]:
+            toplevel = True
+        buf = load_url(url)
+        html = lxml.html.parse(buf).getroot()
+        # bitcointip_keywords = ('+/u/bitcointip')
+        comment_id = None
+        if toplevel:
+            comment_list = html.xpath('//div[@class="commentarea"]/div[@class="sitetable nestedlisting"]/div[@data-fullname]')
+            if len(comment_list) == 0:
+                comment_id = comment_list[0].get('data-fullname')
+            else:
+                for c in comment_list:
+                    if '+/u/bitcointip' in c.xpath('div[contains(@class, "entry")]/div[@class="noncollapsed"]/form[@class="usertext"]/div[@class="usertext-body"]/div[@class="md"]')[0].text_content():
+                        comment_id = c.get('data-fullname')
+                        break
         else:
-            for c in comment_list:
-                if '+/u/bitcointip' in c.xpath('div[contains(@class, "entry")]/div[@class="noncollapsed"]/form[@class="usertext"]/div[@class="usertext-body"]/div[@class="md"]')[0].text_content():
-                    comment_id = c.get('data-fullname')
-                    break
-    else:
-        comment_list = html.xpath('//div[@class="commentarea"]/div[@class="sitetable nestedlisting"]/div/div[@class="child"]/div/div[@data-fullname]')
-        if len(comment_list) == 1:
-            comment_id = comment_list[0].get('data-fullname')
-        else:
-            for c in comment_list:
-                if '+/u/bitcointip' in c.xpath('div[contains(@class, "entry")]/div[@class="noncollapsed"]/form[@class="usertext"]/div[@class="usertext-body"]/div[@class="md"]')[0].text_content():
-                    comment_id = c.get('data-fullname')
-                    break
+            comment_list = html.xpath('//div[@class="commentarea"]/div[@class="sitetable nestedlisting"]/div/div[@class="child"]/div/div[@data-fullname]')
+            if len(comment_list) == 1:
+                comment_id = comment_list[0].get('data-fullname')
+            else:
+                for c in comment_list:
+                    if '+/u/bitcointip' in c.xpath('div[contains(@class, "entry")]/div[@class="noncollapsed"]/form[@class="usertext"]/div[@class="usertext-body"]/div[@class="md"]')[0].text_content():
+                        comment_id = c.get('data-fullname')
+                        break
+    except KeyboardInterrupt:
+        raise
     return(comment_id)
 
 
@@ -125,8 +136,8 @@ def get_comment_time(fullname):
 
 
 def connect_db(rw=False):
-    # ro is support in python 3.4+
-    # http://docs.python.org/3.4/library/sqlite3.html?highlight=sqlite3#sqlite3.connect
+    # ro is supported in python 3.4+
+    # http://docs.python.org/3.4/library/sqlite3.html#sqlite3.connect
     #if rw:
     #    return(sqlite3.connect('bitcointip.db'))
     #else:
@@ -137,7 +148,7 @@ def connect_db(rw=False):
 def update_db(tips):
     with closing(connect_db()) as db:
         c = db.cursor()
-        # TODO to init method
+        # TODO: to init method
         c.execute('CREATE TABLE IF NOT EXISTS tips (id TEXT UNIQUE, amountBTC REAL, amountUSD REAL, time INTEGER, sender TEXT, receiver TEXT, subreddit TEXT)')
         with db:
             c = db.cursor()
@@ -161,10 +172,12 @@ def sync(time='hour', page=1):
     i = page
     while True:
         print('Page: {}'.format(i))
-        raw_tips = download_data(url.substitute(time=time, site=i))
-        if raw_tips is None:
+        try:
+            raw_tips = download_data(url.substitute(time=time, site=i))
+            if raw_tips is None:
+                break
+        except KeyboardInterrupt:
             break
-
         tips = extract_tips(raw_tips)
         update_db(tips)
         i += 1
