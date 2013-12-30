@@ -31,11 +31,8 @@ def load_url(url):
     req = Request(url, headers=header_ua)
     try:
         data = urlopen(req).read()
-    except HTTPError as e:
-        if e.code == 504:
-            return(e.code)
-        else:
-            return(None)
+    except HTTPError:
+        return(None)
     buf = io.StringIO()
     buf.write(data.decode(errors='ignore'))
     buf.seek(0)
@@ -54,7 +51,8 @@ def extract_tips(raw_tips):
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         future_to_tip = {executor.submit(extract_tip, tip): tip for tip in raw_tips}
         for future in concurrent.futures.as_completed(future_to_tip):
-            tips.append(future.result())
+            if(future.result() is not None):
+                tips.append(future.result())
     return(tips)
 
 
@@ -68,14 +66,11 @@ def extract_tip(tip):
         try:
             data_tip['fullname'] = get_tipping_comment(url_tipped)
         except:
-            #continue
             return(None)
         if data_tip['fullname'] is None:
-            #continue
             return(None)
         c_data = get_comment_data(data_tip['fullname'].split('_')[1])
         if c_data is None:
-            #continue
             return(None)
         data_tip['amountBTC'] = c_data['amountBTC']
         data_tip['amountUSD'] = c_data['amountUSD']
