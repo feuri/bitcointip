@@ -1,7 +1,9 @@
 #!/usr/bin/python3
 
+import concurrent.futures
 from contextlib import closing
 import io
+from itertools import count
 import json
 from string import Template
 import sqlite3
@@ -49,41 +51,50 @@ def extract_tips(raw_tips):
     # 4) get comment data
     #    http://www.reddit.com/api/info.json?id=t1_c7h194m
     tips = []
-    for tip in raw_tips:
-        try:
-            data_tip = {}
-            url_tipped = tip.xpath('td[@class="right"]/a')[0].get('href')
-            data_tip['subreddit'] = tip.xpath('td[@class="right"]/span/a')[1].text
-            # skip comment for now, if no tip is found
-            # TODO: proper error handling
-            try:
-                data_tip['fullname'] = get_tipping_comment(url_tipped)
-            except IndexError:
-                continue
-            if data_tip['fullname'] is None:
-                continue
-            c_data = get_comment_data(data_tip['fullname'].split('_')[1])
-            if c_data is None:
-                continue
-            data_tip['amountBTC'] = c_data['amountBTC']
-            data_tip['amountUSD'] = c_data['amountUSD']
-            data_tip['sender'] = c_data['sender']
-            data_tip['receiver'] = c_data['receiver']
-            data_tip['time'] = get_comment_time(data_tip['fullname'])
-            tips.append(data_tip)
-        except KeyboardInterrupt:
-            raise
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        future_to_tip = {executor.submit(extract_tip, tip): tip for tip in raw_tips}
+        for future in concurrent.futures.as_completed(future_to_tip):
+            tips.append(future.result())
     return(tips)
+
+
+def extract_tip(tip):
+    try:
+        data_tip = {}
+        url_tipped = tip.xpath('td[@class="right"]/a')[0].get('href')
+        data_tip['subreddit'] = tip.xpath('td[@class="right"]/span/a')[1].text
+        # skip comment for now if no tip is found
+        # TODO: proper error handling
+        try:
+            data_tip['fullname'] = get_tipping_comment(url_tipped)
+        except:
+            #continue
+            return(None)
+        if data_tip['fullname'] is None:
+            #continue
+            return(None)
+        c_data = get_comment_data(data_tip['fullname'].split('_')[1])
+        if c_data is None:
+            #continue
+            return(None)
+        data_tip['amountBTC'] = c_data['amountBTC']
+        data_tip['amountUSD'] = c_data['amountUSD']
+        data_tip['sender'] = c_data['sender']
+        data_tip['receiver'] = c_data['receiver']
+        data_tip['time'] = get_comment_time(data_tip['fullname'])
+    except KeyboardInterrupt:
+        raise
+    return(data_tip)
 
 
 def get_tipping_comment(url):
     try:
         print(url)
-        # dont know how to view NSFW subreddit content yet, skip them for now
-        if ('GirlsGoneBitcoin') in url:
+        # dont know how to view private/NSFW subreddit content yet, skip them for now
+        url_split = url.split('/')
+        if url_split[4] in ('GirlsGoneBitcoin', 'cpn'):
             return(None)
         toplevel = False
-        url_split = url.split('/')
         if url_split[6] == url_split[8]:
             toplevel = True
         buf = load_url(url)
@@ -169,8 +180,7 @@ def update_db(tips):
 def sync(time='hour', page=1):
     url = Template('http://bitcointip.net/tipped.php?subreddit=all&type=all&by=tipped&time=${time}&sort=last&page=${site}')
     tips = {}
-    i = page
-    while True:
+    for i in count(page):
         print('Page: {}'.format(i))
         try:
             raw_tips = download_data(url.substitute(time=time, site=i))
@@ -180,7 +190,6 @@ def sync(time='hour', page=1):
             break
         tips = extract_tips(raw_tips)
         update_db(tips)
-        i += 1
 
 
 def plot_chart(tips, n_range,
