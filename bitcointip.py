@@ -22,8 +22,11 @@ from werkzeug.contrib.cache import FileSystemCache
 
 app = Flask(__name__)
 cache = FileSystemCache('cache/')
+cache_timeout = 15*60  # 15 minutes
 header_img = {'Content-type': 'image/png'}
 header_ua = {'User-Agent': 'bitcointip.feuri.de/0.0.1'}
+query_all = 'SELECT amountBTC FROM tips WHERE time BETWEEN ? AND ?'
+query_subreddit = 'SELECT amountBTC FROM tips WHERE subreddit = ? AND time BETWEEN ? AND ?'
 
 
 def load_url(url):
@@ -279,136 +282,179 @@ def teardown_request(exception):
 
 @app.route('/')
 def index():
-    return(render_template('base.html'))
+    db = getattr(g, 'db', None)
+    with db:
+        c = db.cursor()
+        c.execute('SELECT sum(amountBTC) FROM tips')
+        total_btc = '{:.4f}'.format(c.fetchone()[0])
+        c.execute('SELECT count(id) FROM tips')
+        num_tips = '{}'.format(c.fetchone()[0])
+        c.execute('SELECT avg(amountBTC) FROM tips')
+        average_btc = '{:.4f}'.format(c.fetchone()[0])
+    return(render_template('base.html', total=total_btc, amount=num_tips, average=average_btc, subreddit='all'))
 
 
-@app.route('/charts/day.png')
-def chart_day():
-    data = cache.get('day_chart')
+@app.route('/r/<subreddit>/')
+def subreddit_stats(subreddit):
+    if(subreddit == 'all'):
+        return(index())
+    db = getattr(g, 'db', None)
+    with db:
+        c = db.cursor()
+        c.execute('SELECT sum(amountBTC) FROM tips WHERE subreddit = ?', [subreddit])
+        total_btc = '{:.4f}'.format(c.fetchone()[0])
+        c.execute('SELECT count(id) FROM tips WHERE subreddit = ?', [subreddit])
+        num_tips = '{}'.format(c.fetchone()[0])
+        c.execute('SELECT avg(amountBTC) FROM tips WHERE subreddit = ?', [subreddit])
+        average_btc = '{:.4f}'.format(c.fetchone()[0])
+    return(render_template('base.html', total=total_btc, amount=num_tips, average=average_btc, subreddit=subreddit))
+
+
+@app.route('/r/<subreddit>/charts/day.png')
+def chart_day(subreddit):
+    cache_id = '_'.join(['chart_day', subreddit])
+    data = cache.get(cache_id)
     if data is None:
         tips = {}
         n_range = 25
         db = getattr(g, 'db', None)
         with db:
+            now = time.time()
             for i in range(n_range):
                 tips[i] = []
                 c = db.cursor()
-                now = time.time()
-                c.execute('SELECT amountBTC FROM tips WHERE time BETWEEN ? AND ?', (now - (i+1)*60*60,
-                                                                                    now - i*60*60))
+                if(subreddit == 'all'):
+                    c.execute(query_all, (now - (i+1)*60*60, now - i*60*60))
+                else:
+                    c.execute(query_subreddit, (subreddit, now - (i+1)*60*60, now - i*60*60))
                 for x in c:
                     tips[i].append(x[0])
         data = plot_chart(tips, 25,
                           xlabel='Time ago (in hours)',
                           title='Tips during the last 24 hours')
-        cache.set('day_chart', data, 15*60)
+        cache.set(cache_id, data, cache_timeout)
     return(data, 200, header_img)
 
 
-@app.route('/charts/day_tipped.png')
-def chart_day_tipped():
-    data = cache.get('day_chart_tipped')
+@app.route('/r/<subreddit>/charts/day_tipped.png')
+def chart_day_tipped(subreddit):
+    cache_id = '_'.join(['chart_day_tipped', subreddit])
+    data = cache.get(cache_id)
     if data is None:
         tips = []
         db = getattr(g, 'db', None)
         with db:
             c = db.cursor()
             now = time.time()
-            c.execute('SELECT amountBTC FROM tips WHERE time BETWEEN ? AND ?', (now - 24*60*60,
-                                                                                now))
+            if(subreddit == 'all'):
+                c.execute(query_all, (now - 24*60*60, now))
+            else:
+                c.execute(query_subreddit, (subreddit, now - 24*60*60, now))
             for x in c:
                 tips.append(x[0])
         data = plot_chart_tipped(tips,
                                  title='Tips during the last 24 hours')
-        cache.set('day_chart_tipped', data, 15*60)
+        cache.set(cache_id, data, cache_timeout)
     return(data, 200, header_img)
 
 
-@app.route('/charts/week.png')
-def chart_week():
-    data = cache.get('week_chart')
+@app.route('/r/<subreddit>/charts/week.png')
+def chart_week(subreddit):
+    cache_id = '_'.join(['chart_week', subreddit])
+    data = cache.get(cache_id)
     if data is None:
         tips = {}
         n_range = 8
         db = getattr(g, 'db', None)
         with db:
+            now = time.time()
             for i in range(n_range):
                 tips[i] = []
                 c = db.cursor()
-                now = time.time()
-                c.execute('SELECT amountBTC FROM tips WHERE time BETWEEN ? AND ?', (now - (i+1)*24*60*60,
-                                                                                    now - i*24*60*60))
+                if(subreddit == 'all'):
+                    c.execute(query_all, (now - (i+1)*24*60*60, now - i*24*60*60))
+                else:
+                    c.execute(query_subreddit, (subreddit, now - (i+1)*24*60*60, now - i*24*60*60))
                 for x in c:
                     tips[i].append(x[0])
         data = plot_chart(tips, 8,
                           xlabel='Time ago (in days)',
                           title='Tips during the last 7 days')
-        cache.set('week_chart', data, 60*60)
+        cache.set(cache_id, data, cache_timeout)
     return(data, 200, header_img)
 
 
-@app.route('/charts/week_tipped.png')
-def chart_week_tipped():
-    data = cache.get('week_chart_tipped')
+@app.route('/r/<subreddit>/charts/week_tipped.png')
+def chart_week_tipped(subreddit):
+    cache_id = '_'.join(['chart_week_tipped', subreddit])
+    data = cache.get(cache_id)
     if data is None:
         tips = []
         db = getattr(g, 'db', None)
         with db:
             c = db.cursor()
             now = time.time()
-            c.execute('SELECT amountBTC FROM tips WHERE time BETWEEN ? AND ?', (now - 7*24*60*60,
-                                                                                now))
+            if(subreddit == 'all'):
+                c.execute(query_all, (now - 7*24*60*60, now))
+            else:
+                c.execute(query_subreddit, (subreddit, now - 7*24*60*60, now))
             for x in c:
                 tips.append(x[0])
         data = plot_chart_tipped(tips,
                                  title='Tips during the last 7 days')
-        cache.set('week_chart_tipped', data, 60*60)
+        cache.set(cache_id, data, cache_timeout)
     return(data, 200, header_img)
 
 
-@app.route('/charts/month.png')
-def chart_month():
-    data = cache.get('month_chart')
+@app.route('/r/<subreddit>/charts/month.png')
+def chart_month(subreddit):
+    cache_id = '_'.join(['chart_month', subreddit])
+    data = cache.get(cache_id)
     if data is None:
         tips = {}
         n_range = 5
         db = getattr(g, 'db', None)
         with db:
+            now = time.time()
             for i in range(n_range):
                 tips[i] = []
                 c = db.cursor()
-                now = time.time()
-                c.execute('SELECT amountBTC FROM tips WHERE time BETWEEN ? AND ?', (now - (i+1)*7*24*60*60,
-                                                                                    now - i*7*24*60*60))
+                if(subreddit == 'all'):
+                    c.execute(query_all, (now - (i+1)*7*24*60*60, now - i*7*24*60*60))
+                else:
+                    c.execute(query_subreddit, (subreddit, now - (i+1)*7*24*60*60, now - i*7*24*60*60))
                 for x in c:
                     tips[i].append(x[0])
         data = plot_chart(tips, 5,
                           xlabel='Time ago (in weeks)',
                           title='Tips during the last 4 weeks')
-        cache.set('month_chart', data, 24*60*60)
+        cache.set(cache_id, data, cache_timeout)
     return(data, 200, header_img)
 
 
-@app.route('/charts/month_tipped.png')
-def chart_month_tipped():
-    data = cache.get('month_chart_tipped')
+@app.route('/r/<subreddit>/charts/month_tipped.png')
+def chart_month_tipped(subreddit):
+    cache_id = '_'.join(['chart_month_tipped', subreddit])
+    data = cache.get(cache_id)
     if data is None:
         tips = []
         db = getattr(g, 'db', None)
         with db:
             c = db.cursor()
             now = time.time()
-            c.execute('SELECT amountBTC FROM tips WHERE time BETWEEN ? AND ?', (now - 4*24*60*60,
-                                                                                now))
+            if(subreddit == 'all'):
+                c.execute(query_all, (now - 4*24*60*60, now))
+            else:
+                c.execute(query_subreddit, (subreddit, now - 4*24*60*60, now))
             for x in c:
                 tips.append(x[0])
         data = plot_chart_tipped(tips,
                                  title='Tips during the last 4 weeks')
-        cache.set('month_chart_tipped', data, 24*60*60)
+        cache.set(cache_id, data, cache_timeout)
     return(data, 200, header_img)
 
 
-@app.route('/imprint')
+@app.route('/imprint/')
 def imprint():
     return(render_template('imprint.html'))
 
@@ -427,4 +473,4 @@ if __name__ == '__main__':
         sync(sys.argv[2], int(sys.argv[3]))
     else:
         # serve, wrong amount of parameters
-        sys.exit(app.run(debug=True))
+        sys.exit(app.run(debug=False))
