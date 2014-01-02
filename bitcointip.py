@@ -472,5 +472,4 @@ if __name__ == '__main__':
     elif len(sys.argv) == 4:
         sync(sys.argv[2], int(sys.argv[3]))
     else:
-        # serve, wrong amount of parameters
-        sys.exit(app.run(debug=False))
+        sys.exit()

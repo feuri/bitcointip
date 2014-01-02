@@ -6,29 +6,32 @@
   <body>
     <h1>unofficial bitcointip charts</h1>
     Data taken from <a href="http://bitcointip.net/tipped.php">bitcointip.net</a></br></br>
+    Total amount tipped: {{ total }}BTC</br>
+    Total amount of tips: {{ amount }}</br>
+    Average amount tipped: {{ average }}BTC</br></br>
     <table>
       <tr>
         <td>
-          <img src="/charts/day.png" />
+          <img src="/r/{{ subreddit }}/charts/day.png" />
         </td>
         <td>
-          <img src="/charts/day_tipped.png" />
-        </td>
-      </tr>
-      <tr>
-        <td>
-          <img src="/charts/week.png" />
-        </td>
-        <td>
-          <img src="/charts/week_tipped.png" />
+          <img src="/r/{{ subreddit }}/charts/day_tipped.png" />
         </td>
       </tr>
       <tr>
         <td>
-          <img src="/charts/month.png" />
+          <img src="/r/{{ subreddit }}/charts/week.png" />
         </td>
         <td>
-          <img src="/charts/month_tipped.png" />
+          <img src="/r/{{ subreddit }}/charts/week_tipped.png" />
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <img src="/r/{{ subreddit }}/charts/month.png" />
+        </td>
+        <td>
+          <img src="/r/{{ subreddit }}/charts/month_tipped.png" />
         </td>
       </tr>
     </table>
